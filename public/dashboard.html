@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Link Shortener</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f6fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .controls {
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: #5a6fd8;
+        }
+
+        .pagination {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .links-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .links-table th,
+        .links-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .links-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .links-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .short-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .short-link:hover {
+            text-decoration: underline;
+        }
+
+        .original-url {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .click-count {
+            background: #28a745;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+
+        .error {
+            text-align: center;
+            padding: 50px;
+            color: #dc3545;
+        }
+
+        .copy-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Dashboard</h1>
+            <p>Manage your shortened links</p>
+        </div>
+
+        <div class="stats" id="stats">
+            <div class="stat-item">
+                <div class="stat-number" id="totalLinks">-</div>
+                <div class="stat-label">Total Links</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="totalClicks">-</div>
+                <div class="stat-label">Total Clicks</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number" id="avgClicks">-</div>
+                <div class="stat-label">Avg Clicks/Link</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <a href="/" class="btn">← Create New Link</a>
+            <div class="pagination">
+                <button id="prevBtn" class="btn">Previous</button>
+                <span id="pageInfo">Page 1</span>
+                <button id="nextBtn" class="btn">Next</button>
+            </div>
+        </div>
+
+        <div id="content">
+            <div class="loading">Loading your links...</div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let totalPages = 1;
+        const pageSize = 10;
+
+        async function loadDashboard(page = 1) {
+            try {
+                const response = await fetch(`/dashboard?page=${page}&limit=${pageSize}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    updateStats(data);
+                    renderLinksTable(data.links);
+                    updatePagination(data.page, data.total_pages);
+                } else {
+                    document.getElementById('content').innerHTML = 
+                        '<div class="error">Error loading dashboard data</div>';
+                }
+            } catch (error) {
+                document.getElementById('content').innerHTML = 
+                    '<div class="error">Network error. Please try again.</div>';
+            }
+        }
+
+        function updateStats(data) {
+            const totalClicks = data.links.reduce((sum, link) => sum + link.click_count, 0);
+            const avgClicks = data.total > 0 ? (totalClicks / data.total).toFixed(1) : 0;
+
+            document.getElementById('totalLinks').textContent = data.total;
+            document.getElementById('totalClicks').textContent = totalClicks;
+            document.getElementById('avgClicks').textContent = avgClicks;
+        }
+
+        function renderLinksTable(links) {
+            const content = document.getElementById('content');
+            
+            if (links.length === 0) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No links yet</h3>
+                        <p>Create your first shortened link to see it here!</p>
+                        <a href="/" class="btn" style="margin-top: 20px;">Create Link</a>
+                    </div>
+                `;
+                return;
+            }
+
+            const table = `
+                <table class="links-table">
+                    <thead>
+                        <tr>
+                            <th>Short Link</th>
+                            <th>Original URL</th>
+                            <th>Clicks</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${links.map(link => `
+                            <tr>
+                                <td>
+                                    <a href="${link.short_url}" target="_blank" class="short-link">
+                                        ${link.short_url.split('/').pop()}
+                                    </a>
+                                </td>
+                                <td>
+                                    <div class="original-url" title="${link.original_url}">
+                                        ${link.original_url}
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="click-count">${link.click_count}</span>
+                                </td>
+                                <td>${new Date(link.created_at).toLocaleDateString()}</td>
+                                <td>
+                                    <button class="copy-btn" onclick="copyToClipboard('${link.short_url}', this)">
+                                        Copy
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            content.innerHTML = table;
+        }
+
+        function updatePagination(page, total) {
+            currentPage = page;
+            totalPages = total;
+            
+            document.getElementById('pageInfo').textContent = `Page ${page} of ${total}`;
+            document.getElementById('prevBtn').disabled = page <= 1;
+            document.getElementById('nextBtn').disabled = page >= total;
+        }
+
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.style.background = '#28a745';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = '';
+                }, 2000);
+            });
+        }
+
+        // Event listeners
+        document.getElementById('prevBtn').addEventListener('click', () => {
+            if (currentPage > 1) {
+                loadDashboard(currentPage - 1);
+            }
+        });
+
+        document.getElementById('nextBtn').addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                loadDashboard(currentPage + 1);
+            }
+        });
+
+        // Load initial data
+        loadDashboard();
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => loadDashboard(currentPage), 30000);
+    </script>
+</body>
+</html>

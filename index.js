@@ -9,9 +9,15 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(express.static('public')); // Serve static files from public directory
 
-// Home route
+// Home route - serve the HTML interface
 app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
+});
+
+// API info route (moved to /api)
+app.get('/api', (req, res) => {
   res.json({
     message: 'Link Shortener API',
     endpoints: {
@@ -113,46 +119,52 @@ app.get('/:id', (req, res, next) => {
   });
 });
 
-// Dashboard (simple JSON view)
+// Dashboard route
 app.get('/dashboard', (req, res) => {
-  // Add basic pagination
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const offset = (page - 1) * limit;
-  
-  // Get total count for pagination
-  db.get('SELECT COUNT(*) as total FROM links', [], (countErr, countRow) => {
-    if (countErr) {
-      console.error('Database error:', countErr);
-      return res.status(500).json({ error: 'Error loading dashboard data' });
-    }
+  // If it's an API request (has query parameters or accepts JSON), return JSON
+  if (req.query.page || req.query.limit || req.headers.accept?.includes('application/json')) {
+    // Add basic pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
     
-    // Get paginated data
-    db.all('SELECT id, original_url, created_at, click_count FROM links ORDER BY created_at DESC LIMIT ? OFFSET ?', 
-      [limit, offset], 
-      (err, rows) => {
-        if (err) {
-          console.error('Database error:', err);
-          return res.status(500).json({ error: 'Error loading dashboard data' });
-        }
-        
-        // Format data for response
-        const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
-        const links = rows.map(row => ({
-          ...row,
-          short_url: `${baseUrl}/${row.id}`
-        }));
-        
-        res.json({
-          success: true,
-          total: countRow.total,
-          page: page,
-          limit: limit,
-          total_pages: Math.ceil(countRow.total / limit),
-          links: links
-        });
+    // Get total count for pagination
+    db.get('SELECT COUNT(*) as total FROM links', [], (countErr, countRow) => {
+      if (countErr) {
+        console.error('Database error:', countErr);
+        return res.status(500).json({ error: 'Error loading dashboard data' });
+      }
+      
+      // Get paginated data
+      db.all('SELECT id, original_url, created_at, click_count FROM links ORDER BY created_at DESC LIMIT ? OFFSET ?', 
+        [limit, offset], 
+        (err, rows) => {
+          if (err) {
+            console.error('Database error:', err);
+            return res.status(500).json({ error: 'Error loading dashboard data' });
+          }
+          
+          // Format data for response
+          const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+          const links = rows.map(row => ({
+            ...row,
+            short_url: `${baseUrl}/${row.id}`
+          }));
+          
+          res.json({
+            success: true,
+            total: countRow.total,
+            page: page,
+            limit: limit,
+            total_pages: Math.ceil(countRow.total / limit),
+            links: links
+          });
+      });
     });
-  });
+  } else {
+    // Serve the HTML dashboard
+    res.sendFile(__dirname + '/public/dashboard.html');
+  }
 });
 
 const server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

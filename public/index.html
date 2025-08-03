@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Link Shortener</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+
+        input[type="url"] {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="url"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .short-url {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            word-break: break-all;
+            border: 2px dashed #667eea;
+        }
+
+        .copy-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .dashboard-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        .stats {
+            margin-top: 20px;
+            text-align: center;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 Link Shortener</h1>
+        
+        <form id="shortenForm">
+            <div class="input-group">
+                <label for="url">Enter your long URL:</label>
+                <input type="url" id="url" placeholder="https://example.com/very/long/url" required>
+            </div>
+            <button type="submit" class="btn">Shorten URL</button>
+        </form>
+
+        <div id="result" class="result">
+            <h3>Your shortened URL:</h3>
+            <div id="shortUrl" class="short-url"></div>
+            <button id="copyBtn" class="copy-btn">Copy to Clipboard</button>
+        </div>
+
+        <button id="dashboardBtn" class="dashboard-btn">View Dashboard</button>
+
+        <div class="stats">
+            <p>Fast • Secure • Free</p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('shortenForm');
+        const result = document.getElementById('result');
+        const shortUrlDiv = document.getElementById('shortUrl');
+        const copyBtn = document.getElementById('copyBtn');
+        const dashboardBtn = document.getElementById('dashboardBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const url = document.getElementById('url').value;
+            
+            try {
+                const response = await fetch('/shorten', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    shortUrlDiv.innerHTML = `
+                        <strong>Short URL:</strong><br>
+                        <a href="${data.short_url}" target="_blank">${data.short_url}</a><br>
+                        <small>Original: ${data.original_url}</small>
+                    `;
+                    result.className = 'result success';
+                    result.style.display = 'block';
+                    
+                    copyBtn.onclick = () => {
+                        navigator.clipboard.writeText(data.short_url);
+                        copyBtn.textContent = 'Copied!';
+                        setTimeout(() => {
+                            copyBtn.textContent = 'Copy to Clipboard';
+                        }, 2000);
+                    };
+                } else {
+                    shortUrlDiv.textContent = data.error || 'An error occurred';
+                    result.className = 'result error';
+                    result.style.display = 'block';
+                }
+            } catch (error) {
+                shortUrlDiv.textContent = 'Network error. Please try again.';
+                result.className = 'result error';
+                result.style.display = 'block';
+            }
+        });
+
+        dashboardBtn.addEventListener('click', () => {
+            window.open('/dashboard', '_blank');
+        });
+    </script>
+</body>
+</html>
