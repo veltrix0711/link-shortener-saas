@@ -101,6 +101,7 @@ app.post('/api/auth/register', async (req, res) => {
 // User Login
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
+  console.log('Login attempt for email:', email);
   
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
@@ -109,18 +110,23 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
       if (err) {
+        console.error('Database error during login:', err);
         return res.status(500).json({ error: 'Database error' });
       }
       
       if (!user) {
+        console.log('User not found for email:', email);
         return res.status(401).json({ error: 'Invalid email or password' });
       }
       
+      console.log('User found, verifying password...');
       const isValidPassword = await verifyPassword(password, user.password_hash);
       if (!isValidPassword) {
+        console.log('Invalid password for user:', email);
         return res.status(401).json({ error: 'Invalid email or password' });
       }
       
+      console.log('Password valid, generating token...');
       const token = generateToken(user.id);
       
       // Set cookie
@@ -130,6 +136,7 @@ app.post('/api/auth/login', async (req, res) => {
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
       });
       
+      console.log('Login successful for user:', user.id);
       res.json({
         success: true,
         message: 'Login successful',
@@ -150,11 +157,16 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // Get current user
-app.get('/api/auth/user', requireAuth, (req, res) => {
-  res.json({
-    success: true,
-    user: req.user
-  });
+app.get('/api/auth/user', optionalAuth, (req, res) => {
+  console.log('User check endpoint called, user:', req.user ? req.user.email : 'not authenticated');
+  if (req.user) {
+    res.json({
+      success: true,
+      user: req.user
+    });
+  } else {
+    res.status(401).json({ error: 'Not authenticated' });
+  }
 });
 
 // Update user profile
@@ -578,15 +590,11 @@ app.post('/shorten', optionalAuth, (req, res) => {
 // QR Code generation endpoint
 app.get('/qr/:id', async (req, res) => {
   const { id } = req.params;
-  
-  // Validate id format
-  if (!id || id.length !== 6) {
-    return res.status(400).json({ error: 'Invalid link ID' });
-  }
+  console.log('QR Code requested for ID:', id);
   
   try {
-    // Check if the link exists
-    db.get('SELECT original_url FROM links WHERE id = ?', [id], async (err, row) => {
+    // Check if the link exists (both by ID and custom alias)
+    db.get('SELECT * FROM links WHERE id = ? OR custom_alias = ?', [id, id], async (err, row) => {
       if (err) {
         console.error('Database error:', err);
         return res.status(500).json({ error: 'Database error occurred' });
@@ -895,6 +903,7 @@ app.get('/api/analytics/:id', (req, res) => {
 app.put('/api/links/:id', (req, res) => {
   const { id } = req.params;
   const { url, customAlias, expiresIn, isActive } = req.body;
+  console.log('Update request for link:', id, 'with data:', { url, customAlias, expiresIn, isActive });
   
   // Get current link first
   db.get('SELECT * FROM links WHERE id = ? OR custom_alias = ?', [id, id], (err, currentLink) => {
@@ -904,9 +913,11 @@ app.put('/api/links/:id', (req, res) => {
     }
     
     if (!currentLink) {
+      console.log('Link not found for update:', id);
       return res.status(404).json({ error: 'Link not found' });
     }
     
+    console.log('Current link found:', currentLink.id);
     let updates = [];
     let values = [];
     
