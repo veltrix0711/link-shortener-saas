@@ -66,7 +66,18 @@
             transition: border-color 0.3s;
         }
 
-        input[type="url"]:focus, input[type="text"]:focus {
+        select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+            background: white;
+            cursor: pointer;
+        }
+
+        input[type="url"]:focus, input[type="text"]:focus, select:focus {
             outline: none;
             border-color: #667eea;
         }
@@ -220,6 +231,23 @@
                 <input type="text" id="customAlias" placeholder="my-awesome-link" maxlength="20">
                 <div class="alias-hint">3-20 characters, letters, numbers, and hyphens only</div>
             </div>
+            <div class="input-group">
+                <label for="expiresIn">Expiration <span class="optional-label">(optional)</span>:</label>
+                <select id="expiresIn">
+                    <option value="">Never expires</option>
+                    <option value="30 minutes">30 minutes</option>
+                    <option value="1 hour">1 hour</option>
+                    <option value="6 hours">6 hours</option>
+                    <option value="24 hours">24 hours</option>
+                    <option value="3 days">3 days</option>
+                    <option value="1 week">1 week</option>
+                    <option value="2 weeks">2 weeks</option>
+                    <option value="1 month">1 month</option>
+                    <option value="3 months">3 months</option>
+                    <option value="6 months">6 months</option>
+                    <option value="1 year">1 year</option>
+                </select>
+            </div>
             <button type="submit" class="btn">Shorten URL</button>
         </form>
 
@@ -263,6 +291,7 @@
             
             const url = document.getElementById('url').value;
             const customAlias = document.getElementById('customAlias').value.trim();
+            const expiresIn = document.getElementById('expiresIn').value;
             
             // Validate custom alias on frontend
             if (customAlias) {
@@ -279,6 +308,9 @@
                 const requestBody = { url: url };
                 if (customAlias) {
                     requestBody.customAlias = customAlias;
+                }
+                if (expiresIn) {
+                    requestBody.expiresIn = expiresIn;
                 }
                 
                 const response = await fetch('/shorten', {
@@ -298,10 +330,13 @@
                     const aliasInfo = data.custom_alias ? 
                         `<small style="color: #667eea; font-weight: bold;">✨ Custom alias: ${data.custom_alias}</small><br>` : '';
                     
+                    const expirationInfo = data.expires_at ? 
+                        `<small style="color: #e74c3c; font-weight: bold;">⏰ Expires: ${new Date(data.expires_at).toLocaleString()}</small><br>` : '';
+                    
                     shortUrlDiv.innerHTML = `
                         <strong>Short URL:</strong><br>
                         <a href="${data.short_url}" target="_blank">${data.short_url}</a><br>
-                        ${aliasInfo}<small>Original: ${data.original_url}</small>
+                        ${aliasInfo}${expirationInfo}<small>Original: ${data.original_url}</small>
                     `;
                     result.className = 'result success';
                     result.style.display = 'block';
@@ -309,6 +344,7 @@
                     // Clear the form
                     document.getElementById('url').value = '';
                     document.getElementById('customAlias').value = '';
+                    document.getElementById('expiresIn').value = '';
                     
                     // Hide QR code section when creating new link
                     qrCodeDiv.style.display = 'none';

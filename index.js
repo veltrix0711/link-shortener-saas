@@ -49,6 +49,7 @@ db.serialize(() => {
     id TEXT PRIMARY KEY,
     original_url TEXT NOT NULL,
     custom_alias TEXT UNIQUE,
+    expires_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     click_count INTEGER DEFAULT 0
   )`);
@@ -72,7 +73,7 @@ db.serialize(() => {
 
 // Create a new shortened link
 app.post('/shorten', (req, res) => {
-  const { url, customAlias } = req.body;
+  const { url, customAlias, expiresIn } = req.body;
   
   // Validate URL
   if (!url) {
@@ -96,15 +97,78 @@ app.post('/shorten', (req, res) => {
     }
   }
   
+  // Validate and calculate expiration date if provided
+  let expiresAt = null;
+  if (expiresIn) {
+    const validUnits = ['seconds', 'minutes', 'hours', 'days', 'weeks', 'months'];
+    const match = expiresIn.match(/^(\d+)\s*(seconds?|minutes?|hours?|days?|weeks?|months?)$/i);
+    
+    if (!match) {
+      return res.status(400).json({ 
+        error: 'Invalid expiration format. Use format like "30 seconds", "30 minutes", "2 hours", "7 days", "2 weeks", "1 month"' 
+      });
+    }
+    
+    const [, amount, unit] = match;
+    const now = new Date();
+    
+    switch (unit.toLowerCase()) {
+      case 'second':
+      case 'seconds':
+        expiresAt = new Date(now.getTime() + parseInt(amount) * 1000);
+        break;
+      case 'minute':
+      case 'minutes':
+        expiresAt = new Date(now.getTime() + parseInt(amount) * 60 * 1000);
+        break;
+      case 'hour':
+      case 'hours':
+        expiresAt = new Date(now.getTime() + parseInt(amount) * 60 * 60 * 1000);
+        break;
+      case 'day':
+      case 'days':
+        expiresAt = new Date(now.getTime() + parseInt(amount) * 24 * 60 * 60 * 1000);
+        break;
+      case 'week':
+      case 'weeks':
+        expiresAt = new Date(now.getTime() + parseInt(amount) * 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'month':
+      case 'months':
+        expiresAt = new Date(now.getTime() + parseInt(amount) * 30 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        return res.status(400).json({ error: 'Invalid time unit' });
+    }
+    
+    // Limit maximum expiration to 1 year
+    const oneYear = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+    if (expiresAt > oneYear) {
+      return res.status(400).json({ error: 'Maximum expiration is 1 year' });
+    }
+  }
+  
   try {
     // Check if URL is valid
     new URL(url);
     
     const id = customAlias || nanoid(6);
-    const insertSql = customAlias 
-      ? 'INSERT INTO links (id, original_url, custom_alias) VALUES (?, ?, ?)'
-      : 'INSERT INTO links (id, original_url) VALUES (?, ?)';
-    const insertParams = customAlias ? [id, url, customAlias] : [id, url];
+    
+    // Build dynamic SQL based on what data we have
+    let insertSql = 'INSERT INTO links (id, original_url';
+    let insertParams = [id, url];
+    
+    if (customAlias) {
+      insertSql += ', custom_alias';
+      insertParams.push(customAlias);
+    }
+    
+    if (expiresAt) {
+      insertSql += ', expires_at';
+      insertParams.push(expiresAt.toISOString());
+    }
+    
+    insertSql += ') VALUES (' + '?,'.repeat(insertParams.length).slice(0, -1) + ')';
     
     db.run(insertSql, insertParams, function(err) {
       if (err) {
@@ -122,7 +186,9 @@ app.post('/shorten', (req, res) => {
         short_url: `${baseUrl}/${id}`, 
         original_url: url,
         id: id,
-        custom_alias: customAlias || null
+        custom_alias: customAlias || null,
+        expires_at: expiresAt ? expiresAt.toISOString() : null,
+        expires_in_human: expiresIn || null
       });
     });
   } catch (err) {
@@ -199,6 +265,20 @@ app.get('/:id', (req, res, next) => {
     
     if (!row) {
       return res.status(404).json({ error: 'Link not found' });
+    }
+    
+    // Check if link has expired
+    if (row.expires_at) {
+      const now = new Date();
+      const expiresAt = new Date(row.expires_at);
+      
+      if (now > expiresAt) {
+        return res.status(410).json({ 
+          error: 'Link has expired',
+          expired_at: expiresAt.toISOString(),
+          message: 'This link has expired and is no longer available'
+        });
+      }
     }
     
     // Capture analytics data
