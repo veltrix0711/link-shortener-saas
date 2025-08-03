@@ -183,28 +183,7 @@
             color: #666;
         }
 
-        .qr-generator-section {
-            margin: 30px 0;
-            padding: 25px;
-            background: rgba(102, 126, 234, 0.1);
-            border-radius: 15px;
-            border: 2px dashed #667eea;
-        }
 
-        .qr-generator-section h3 {
-            color: #333;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-
-        .qr-gen-btn {
-            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
-        }
-
-        .qr-gen-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(23, 162, 184, 0.3);
-        }
     </style>
 </head>
 <body>
@@ -218,16 +197,6 @@
             </div>
             <button type="submit" class="btn">Shorten URL</button>
         </form>
-
-        <!-- QR Code Generator Section -->
-        <div class="qr-generator-section">
-            <h3>🎯 Generate QR Code for Existing Link</h3>
-            <div class="input-group">
-                <label for="existingUrl">Enter your short URL or ID:</label>
-                <input type="text" id="existingUrl" placeholder="https://yourapp.railway.app/abc123 or just abc123" />
-            </div>
-            <button id="generateQrBtn" class="btn qr-gen-btn">Generate QR Code</button>
-        </div>
 
         <div id="result" class="result">
             <h3>Your shortened URL:</h3>
@@ -260,8 +229,6 @@
         const qrCodeDiv = document.getElementById('qrCode');
         const qrImage = document.getElementById('qrImage');
         const dashboardBtn = document.getElementById('dashboardBtn');
-        const generateQrBtn = document.getElementById('generateQrBtn');
-        const existingUrlInput = document.getElementById('existingUrl');
 
         let currentLinkId = null;
         let currentShortUrl = null;
@@ -365,77 +332,6 @@
 
         dashboardBtn.addEventListener('click', () => {
             window.open('/dashboard', '_blank');
-        });
-
-        // QR Generator for existing links
-        generateQrBtn.addEventListener('click', async () => {
-            const input = existingUrlInput.value.trim();
-            if (!input) {
-                alert('Please enter a short URL or ID');
-                return;
-            }
-
-            // Extract ID from URL or use direct ID
-            let linkId = input;
-            if (input.includes('/')) {
-                linkId = input.split('/').pop();
-            }
-
-            if (linkId.length !== 6) {
-                alert('Invalid link ID. Please enter a valid 6-character ID or full short URL.');
-                return;
-            }
-
-            try {
-                generateQrBtn.textContent = 'Generating...';
-                generateQrBtn.disabled = true;
-                
-                const qrResponse = await fetch(`/qr/${linkId}`);
-                
-                if (qrResponse.ok) {
-                    const blob = await qrResponse.blob();
-                    const qrUrl = URL.createObjectURL(blob);
-                    
-                    // Show result section with QR code
-                    result.className = 'result success';
-                    result.style.display = 'block';
-                    
-                    shortUrlDiv.innerHTML = `
-                        <strong>QR Code for:</strong><br>
-                        <span style="color: #667eea; font-weight: bold;">${window.location.origin}/${linkId}</span>
-                    `;
-                    
-                    qrImage.src = qrUrl;
-                    qrCodeDiv.style.display = 'block';
-                    downloadQrBtn.style.display = 'inline-block';
-                    
-                    // Hide copy and QR generation buttons, show download only
-                    copyBtn.style.display = 'none';
-                    qrBtn.style.display = 'none';
-                    
-                    // Setup download button
-                    downloadQrBtn.onclick = () => {
-                        const link = document.createElement('a');
-                        link.href = qrUrl;
-                        link.download = `qr-code-${linkId}.png`;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    };
-                    
-                    // Clear the input
-                    existingUrlInput.value = '';
-                    
-                } else {
-                    alert('Link not found. Please check the URL or ID and try again.');
-                }
-            } catch (error) {
-                console.error('QR generation error:', error);
-                alert('Error generating QR code. Please try again.');
-            } finally {
-                generateQrBtn.textContent = 'Generate QR Code';
-                generateQrBtn.disabled = false;
-            }
         });
     </script>
 </body>
