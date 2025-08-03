@@ -4,6 +4,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const { nanoid } = require('nanoid'); // Import nanoid v3.x
 const QRCode = require('qrcode'); // Import QR code generator
+const UAParser = require('ua-parser-js'); // Import user-agent parser
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -50,6 +51,21 @@ db.serialize(() => {
     custom_alias TEXT UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     click_count INTEGER DEFAULT 0
+  )`);
+  
+  db.run(`CREATE TABLE IF NOT EXISTS clicks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    link_id TEXT NOT NULL,
+    ip_address TEXT,
+    user_agent TEXT,
+    referrer TEXT,
+    country TEXT,
+    city TEXT,
+    device_type TEXT,
+    browser TEXT,
+    os TEXT,
+    clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (link_id) REFERENCES links(id)
   )`);
   console.log('Database tables initialized');
 });
@@ -174,12 +190,8 @@ app.get('/:id', (req, res, next) => {
 
   const { id } = req.params;
   
-  // Validate id format (should be 6 characters for nanoid)
-  if (!id || id.length !== 6) {
-    return res.status(400).json({ error: 'Invalid link ID' });
-  }
-  
-  db.get('SELECT original_url FROM links WHERE id = ?', [id], (err, row) => {
+  // Look up link by ID or custom alias
+  db.get('SELECT * FROM links WHERE id = ? OR custom_alias = ?', [id, id], (err, row) => {
     if (err) {
       console.error('Database error:', err);
       return res.status(500).json({ error: 'Database error occurred' });
@@ -189,10 +201,40 @@ app.get('/:id', (req, res, next) => {
       return res.status(404).json({ error: 'Link not found' });
     }
     
-    // Update click count (don't wait for completion but log errors)
-    db.run('UPDATE links SET click_count = click_count + 1 WHERE id = ?', [id], (updateErr) => {
+    // Capture analytics data
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    const referrer = req.headers.referer || req.headers.referrer || 'Direct';
+    const ipAddress = req.headers['x-forwarded-for'] || 
+                     req.headers['x-real-ip'] || 
+                     req.connection.remoteAddress || 
+                     req.socket.remoteAddress || 
+                     'Unknown';
+    
+    // Parse user agent for device/browser info
+    const parser = new UAParser(userAgent);
+    const result = parser.getResult();
+    
+    const deviceType = result.device.type || (result.os.name ? 'desktop' : 'unknown');
+    const browser = result.browser.name || 'Unknown';
+    const os = result.os.name || 'Unknown';
+    
+    // Update click count
+    db.run('UPDATE links SET click_count = click_count + 1 WHERE id = ?', [row.id], (updateErr) => {
       if (updateErr) {
         console.error('Error updating click count:', updateErr);
+      }
+    });
+    
+    // Insert detailed analytics
+    db.run(`INSERT INTO clicks (
+      link_id, ip_address, user_agent, referrer, 
+      device_type, browser, os
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+      row.id, ipAddress, userAgent, referrer,
+      deviceType, browser, os
+    ], (analyticsErr) => {
+      if (analyticsErr) {
+        console.error('Error inserting analytics:', analyticsErr);
       }
     });
     
@@ -247,6 +289,129 @@ app.get('/dashboard', (req, res) => {
     // Serve the HTML dashboard
     res.sendFile(__dirname + '/public/dashboard.html');
   }
+});
+
+// Analytics API endpoints
+// Global analytics API (must come before individual analytics)
+app.get('/api/analytics/global', (req, res) => {
+  // Get total stats
+  db.get(`SELECT 
+    COUNT(DISTINCT l.id) as total_links,
+    COUNT(c.id) as total_clicks,
+    COUNT(DISTINCT DATE(c.clicked_at)) as active_days
+  FROM links l 
+  LEFT JOIN clicks c ON l.id = c.link_id`, [], (err, stats) => {
+    if (err) {
+      console.error('Global stats error:', err);
+      return res.status(500).json({ error: 'Error loading global stats' });
+    }
+    
+    // Get clicks over time (last 30 days)
+    db.all(`SELECT 
+      DATE(clicked_at) as date,
+      COUNT(*) as clicks
+    FROM clicks 
+    WHERE clicked_at >= datetime('now', '-30 days')
+    GROUP BY DATE(clicked_at)
+    ORDER BY date DESC`, [], (timeErr, timeStats) => {
+      if (timeErr) {
+        console.error('Time stats error:', timeErr);
+        return res.status(500).json({ error: 'Error loading time stats' });
+      }
+      
+      // Get top performing links
+      db.all(`SELECT 
+        l.id,
+        l.original_url,
+        l.custom_alias,
+        l.click_count,
+        COUNT(c.id) as recent_clicks
+      FROM links l 
+      LEFT JOIN clicks c ON l.id = c.link_id AND c.clicked_at >= datetime('now', '-7 days')
+      GROUP BY l.id
+      ORDER BY l.click_count DESC
+      LIMIT 10`, [], (topErr, topLinks) => {
+        if (topErr) {
+          console.error('Top links error:', topErr);
+          return res.status(500).json({ error: 'Error loading top links' });
+        }
+        
+        const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+        const formattedTopLinks = topLinks.map(link => ({
+          ...link,
+          short_url: `${baseUrl}/${link.id}`
+        }));
+        
+        res.json({
+          success: true,
+          global_stats: stats,
+          clicks_over_time: timeStats,
+          top_links: formattedTopLinks
+        });
+      });
+    });
+  });
+});
+
+app.get('/api/analytics/:id', (req, res) => {
+  const { id } = req.params;
+  
+  // Get link info first (by ID or custom alias)
+  db.get('SELECT * FROM links WHERE id = ? OR custom_alias = ?', [id, id], (err, link) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Database error occurred' });
+    }
+    
+    if (!link) {
+      return res.status(404).json({ error: 'Link not found' });
+    }
+    
+    // Get detailed analytics
+    db.all(`SELECT 
+      DATE(clicked_at) as date,
+      COUNT(*) as clicks,
+      device_type,
+      browser,
+      os,
+      referrer
+    FROM clicks 
+    WHERE link_id = ? 
+    GROUP BY DATE(clicked_at), device_type, browser, os, referrer
+    ORDER BY clicked_at DESC`, [link.id], (analyticsErr, analytics) => {
+      if (analyticsErr) {
+        console.error('Analytics error:', analyticsErr);
+        return res.status(500).json({ error: 'Error loading analytics' });
+      }
+      
+      // Get summary stats
+      db.all(`SELECT 
+        COUNT(*) as total_clicks,
+        COUNT(DISTINCT DATE(clicked_at)) as active_days,
+        device_type,
+        COUNT(*) as device_clicks
+      FROM clicks 
+      WHERE link_id = ? 
+      GROUP BY device_type`, [link.id], (summaryErr, deviceStats) => {
+        if (summaryErr) {
+          console.error('Summary error:', summaryErr);
+          return res.status(500).json({ error: 'Error loading summary' });
+        }
+        
+        const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+        
+        res.json({
+          success: true,
+          link: {
+            ...link,
+            short_url: `${baseUrl}/${link.id}`
+          },
+          analytics: analytics,
+          device_stats: deviceStats
+        });
+      });
+    });
+  });
 });
 
 const server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
