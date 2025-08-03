@@ -117,6 +117,55 @@
             margin-top: 10px;
         }
 
+        .qr-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            margin-left: 10px;
+        }
+
+        .download-btn {
+            background: #6f42c1;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            margin-left: 10px;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .qr-code {
+            margin-top: 20px;
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            border: 2px solid #e1e1e1;
+        }
+
+        .qr-code h4 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .qr-code img {
+            max-width: 300px;
+            height: auto;
+            border-radius: 8px;
+        }
+
         .dashboard-btn {
             background: #17a2b8;
             color: white;
@@ -150,7 +199,15 @@
         <div id="result" class="result">
             <h3>Your shortened URL:</h3>
             <div id="shortUrl" class="short-url"></div>
-            <button id="copyBtn" class="copy-btn">Copy to Clipboard</button>
+            <div class="actions">
+                <button id="copyBtn" class="copy-btn">Copy to Clipboard</button>
+                <button id="qrBtn" class="qr-btn">Generate QR Code</button>
+                <button id="downloadQrBtn" class="download-btn" style="display: none;">Download QR Code</button>
+            </div>
+            <div id="qrCode" class="qr-code" style="display: none;">
+                <h4>QR Code:</h4>
+                <img id="qrImage" src="" alt="QR Code" />
+            </div>
         </div>
 
         <button id="dashboardBtn" class="dashboard-btn">View Dashboard</button>
@@ -165,7 +222,14 @@
         const result = document.getElementById('result');
         const shortUrlDiv = document.getElementById('shortUrl');
         const copyBtn = document.getElementById('copyBtn');
+        const qrBtn = document.getElementById('qrBtn');
+        const downloadQrBtn = document.getElementById('downloadQrBtn');
+        const qrCodeDiv = document.getElementById('qrCode');
+        const qrImage = document.getElementById('qrImage');
         const dashboardBtn = document.getElementById('dashboardBtn');
+
+        let currentLinkId = null;
+        let currentShortUrl = null;
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -184,6 +248,9 @@
                 const data = await response.json();
 
                 if (data.success) {
+                    currentLinkId = data.id;
+                    currentShortUrl = data.short_url;
+                    
                     shortUrlDiv.innerHTML = `
                         <strong>Short URL:</strong><br>
                         <a href="${data.short_url}" target="_blank">${data.short_url}</a><br>
@@ -192,6 +259,11 @@
                     result.className = 'result success';
                     result.style.display = 'block';
                     
+                    // Hide QR code section when creating new link
+                    qrCodeDiv.style.display = 'none';
+                    downloadQrBtn.style.display = 'none';
+                    
+                    // Setup copy button
                     copyBtn.onclick = () => {
                         navigator.clipboard.writeText(data.short_url);
                         copyBtn.textContent = 'Copied!';
@@ -199,17 +271,62 @@
                             copyBtn.textContent = 'Copy to Clipboard';
                         }, 2000);
                     };
+
+                    // Setup QR code button
+                    qrBtn.onclick = generateQRCode;
+                    
                 } else {
                     shortUrlDiv.textContent = data.error || 'An error occurred';
                     result.className = 'result error';
                     result.style.display = 'block';
+                    qrCodeDiv.style.display = 'none';
                 }
             } catch (error) {
                 shortUrlDiv.textContent = 'Network error. Please try again.';
                 result.className = 'result error';
                 result.style.display = 'block';
+                qrCodeDiv.style.display = 'none';
             }
         });
+
+        async function generateQRCode() {
+            if (!currentLinkId) return;
+            
+            try {
+                qrBtn.textContent = 'Generating...';
+                qrBtn.disabled = true;
+                
+                const qrResponse = await fetch(`/qr/${currentLinkId}`);
+                
+                if (qrResponse.ok) {
+                    const blob = await qrResponse.blob();
+                    const qrUrl = URL.createObjectURL(blob);
+                    
+                    qrImage.src = qrUrl;
+                    qrCodeDiv.style.display = 'block';
+                    downloadQrBtn.style.display = 'inline-block';
+                    
+                    // Setup download button
+                    downloadQrBtn.onclick = () => {
+                        const link = document.createElement('a');
+                        link.href = qrUrl;
+                        link.download = `qr-code-${currentLinkId}.png`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    };
+                    
+                } else {
+                    alert('Failed to generate QR code. Please try again.');
+                }
+            } catch (error) {
+                console.error('QR generation error:', error);
+                alert('Error generating QR code. Please try again.');
+            } finally {
+                qrBtn.textContent = 'Generate QR Code';
+                qrBtn.disabled = false;
+            }
+        }
 
         dashboardBtn.addEventListener('click', () => {
             window.open('/dashboard', '_blank');

@@ -158,6 +158,17 @@
             border-radius: 3px;
             cursor: pointer;
             font-size: 0.8em;
+            margin-right: 5px;
+        }
+
+        .qr-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8em;
         }
 
         .empty-state {
@@ -169,6 +180,60 @@
         .empty-state h3 {
             margin-bottom: 10px;
             color: #333;
+        }
+
+        /* QR Code Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 80%;
+            max-width: 400px;
+            text-align: center;
+            position: relative;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            position: absolute;
+            right: 15px;
+            top: 10px;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #333;
+        }
+
+        .qr-modal-image {
+            max-width: 100%;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+
+        .modal-download-btn {
+            background: #6f42c1;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 15px;
         }
     </style>
 </head>
@@ -203,12 +268,21 @@
             </div>
         </div>
 
-        <div id="content">
-            <div class="loading">Loading your links...</div>
+            <div id="content">
+                <div class="loading">Loading your links...</div>
+            </div>
         </div>
-    </div>
 
-    <script>
+        <!-- QR Code Modal -->
+        <div id="qrModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeQRModal()">&times;</span>
+                <h3>QR Code</h3>
+                <div id="qrModalContent">
+                    <div class="loading">Generating QR code...</div>
+                </div>
+            </div>
+        </div>    <script>
         let currentPage = 1;
         let totalPages = 1;
         const pageSize = 10;
@@ -287,6 +361,9 @@
                                     <button class="copy-btn" onclick="copyToClipboard('${link.short_url}', this)">
                                         Copy
                                     </button>
+                                    <button class="qr-btn" onclick="showQRCode('${link.id}', '${link.short_url}')">
+                                        QR
+                                    </button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -316,6 +393,58 @@
                     button.style.background = '';
                 }, 2000);
             });
+        }
+
+        // QR Code Functions
+        async function showQRCode(linkId, shortUrl) {
+            const modal = document.getElementById('qrModal');
+            const modalContent = document.getElementById('qrModalContent');
+            
+            modal.style.display = 'block';
+            modalContent.innerHTML = '<div class="loading">Generating QR code...</div>';
+            
+            try {
+                const response = await fetch(`/qr/${linkId}`);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const qrUrl = URL.createObjectURL(blob);
+                    
+                    modalContent.innerHTML = `
+                        <p><strong>QR Code for:</strong><br>${shortUrl}</p>
+                        <img src="${qrUrl}" alt="QR Code" class="qr-modal-image">
+                        <br>
+                        <button class="modal-download-btn" onclick="downloadQRCode('${qrUrl}', '${linkId}')">
+                            Download QR Code
+                        </button>
+                    `;
+                } else {
+                    modalContent.innerHTML = '<div class="error">Failed to generate QR code</div>';
+                }
+            } catch (error) {
+                modalContent.innerHTML = '<div class="error">Error generating QR code</div>';
+            }
+        }
+
+        function closeQRModal() {
+            document.getElementById('qrModal').style.display = 'none';
+        }
+
+        function downloadQRCode(qrUrl, linkId) {
+            const link = document.createElement('a');
+            link.href = qrUrl;
+            link.download = `qr-code-${linkId}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('qrModal');
+            if (event.target === modal) {
+                closeQRModal();
+            }
         }
 
         // Event listeners

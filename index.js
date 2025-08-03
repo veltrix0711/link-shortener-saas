@@ -3,6 +3,7 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const { nanoid } = require('nanoid'); // Import nanoid v3.x
+const QRCode = require('qrcode'); // Import QR code generator
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -23,6 +24,7 @@ app.get('/api', (req, res) => {
     endpoints: {
       'POST /shorten': 'Create a new short URL',
       'GET /:id': 'Redirect to original URL',
+      'GET /qr/:id': 'Generate QR code for a short URL',
       'GET /dashboard': 'View all shortened links'
     }
   });
@@ -80,6 +82,57 @@ app.post('/shorten', (req, res) => {
     });
   } catch (err) {
     return res.status(400).json({ error: 'Invalid URL format' });
+  }
+});
+
+// QR Code generation endpoint
+app.get('/qr/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  // Validate id format
+  if (!id || id.length !== 6) {
+    return res.status(400).json({ error: 'Invalid link ID' });
+  }
+  
+  try {
+    // Check if the link exists
+    db.get('SELECT original_url FROM links WHERE id = ?', [id], async (err, row) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ error: 'Database error occurred' });
+      }
+      
+      if (!row) {
+        return res.status(404).json({ error: 'Link not found' });
+      }
+      
+      try {
+        const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+        const shortUrl = `${baseUrl}/${id}`;
+        
+        // Generate QR code as PNG buffer
+        const qrCodeBuffer = await QRCode.toBuffer(shortUrl, {
+          width: 300,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        });
+        
+        // Set appropriate headers
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Content-Disposition', `inline; filename="qr-${id}.png"`);
+        res.send(qrCodeBuffer);
+        
+      } catch (qrError) {
+        console.error('QR Code generation error:', qrError);
+        res.status(500).json({ error: 'Failed to generate QR code' });
+      }
+    });
+  } catch (error) {
+    console.error('QR endpoint error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
