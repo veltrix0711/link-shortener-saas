@@ -553,8 +553,10 @@ app.post('/shorten', optionalAuth, (req, res) => {
         return res.status(500).json({ error: 'Error saving to database' });
       }
       
-      // Use RAILWAY_STATIC_URL if available, otherwise fall back to host header
-      const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+      // Use Railway URL if available, otherwise fall back to host header
+      const baseUrl = process.env.RAILWAY_STATIC_URL 
+        ? `https://${process.env.RAILWAY_STATIC_URL}` 
+        : `${req.protocol}://${req.headers.host}`;
       
       res.json({ 
         success: true,
@@ -595,7 +597,9 @@ app.get('/qr/:id', async (req, res) => {
       }
       
       try {
-        const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+        const baseUrl = process.env.RAILWAY_STATIC_URL 
+          ? `https://${process.env.RAILWAY_STATIC_URL}` 
+          : `${req.protocol}://${req.headers.host}`;
         const shortUrl = `${baseUrl}/${id}`;
         
         // Generate QR code as PNG buffer
@@ -734,7 +738,9 @@ app.get('/dashboard', (req, res) => {
           }
           
           // Format data for response
-          const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+          const baseUrl = process.env.RAILWAY_STATIC_URL 
+            ? `https://${process.env.RAILWAY_STATIC_URL}` 
+            : `${req.protocol}://${req.headers.host}`;
           const links = rows.map(row => ({
             ...row,
             short_url: `${baseUrl}/${row.id}`
@@ -801,7 +807,9 @@ app.get('/api/analytics/global', (req, res) => {
           return res.status(500).json({ error: 'Error loading top links' });
         }
         
-        const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+        const baseUrl = process.env.RAILWAY_STATIC_URL 
+          ? `https://${process.env.RAILWAY_STATIC_URL}` 
+          : `${req.protocol}://${req.headers.host}`;
         const formattedTopLinks = topLinks.map(link => ({
           ...link,
           short_url: `${baseUrl}/${link.id}`
@@ -863,7 +871,9 @@ app.get('/api/analytics/:id', (req, res) => {
           return res.status(500).json({ error: 'Error loading summary' });
         }
         
-        const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+        const baseUrl = process.env.RAILWAY_STATIC_URL 
+          ? `https://${process.env.RAILWAY_STATIC_URL}` 
+          : `${req.protocol}://${req.headers.host}`;
         
         res.json({
           success: true,
@@ -1017,7 +1027,9 @@ app.put('/api/links/:id', (req, res) => {
             return res.status(500).json({ error: 'Error retrieving updated link' });
           }
           
-          const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
+          const baseUrl = process.env.RAILWAY_STATIC_URL 
+            ? `https://${process.env.RAILWAY_STATIC_URL}` 
+            : `${req.protocol}://${req.headers.host}`;
           
           res.json({
             success: true,
@@ -1226,7 +1238,7 @@ app.post('/api/links/bulk', (req, res) => {
   }
 });
 
-const server = app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+const server = app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 
 // Proper shutdown handling
 process.on('SIGINT', () => {

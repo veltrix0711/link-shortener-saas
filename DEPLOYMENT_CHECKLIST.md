@@ -6,6 +6,7 @@
 - [x] Database persistence enabled  
 - [x] All dependencies in package.json
 - [x] Railway configuration ready
+- [x] Fixed Railway URL handling for QR codes and links
 
 ## Railway Environment Variables
 Set these in Railway dashboard > Variables:
@@ -19,9 +20,17 @@ NODE_ENV=production
 DB_PATH=./links.db
 ```
 
+**Note:** Railway automatically sets `RAILWAY_STATIC_URL` - do not set this manually.
+
+## Recent Fixes Applied
+- ✅ Fixed HTTPS URL generation for Railway deployment
+- ✅ Updated base URL handling to use proper protocol (https://)
+- ✅ Fixed server binding to listen on all interfaces (0.0.0.0)
+- ✅ QR code generation now uses correct Railway domain
+
 ## Deploy Steps
 1. Push to GitHub (already done)
-2. Set environment variables in Railway dashboard
+2. Set environment variables in Railway dashboard  
 3. Deploy via Railway dashboard or CLI
 4. Test all features on live site
 
@@ -31,6 +40,8 @@ DB_PATH=./links.db
 - [ ] User login works  
 - [ ] Link creation works (authenticated)
 - [ ] Link creation works (anonymous)
+- [ ] **QR code generation works with correct URLs**
+- [ ] **Short URLs resolve correctly**
 - [ ] Dashboard shows user data
 - [ ] Link management functions work
 - [ ] Analytics tracking works
