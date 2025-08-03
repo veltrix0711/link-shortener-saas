@@ -721,7 +721,7 @@ app.get('/:id', (req, res, next) => {
 });
 
 // Dashboard route
-app.get('/dashboard', (req, res) => {
+app.get('/dashboard', optionalAuth, (req, res) => {
   // If it's an API request (has query parameters or accepts JSON), return JSON
   if (req.query.page || req.query.limit || req.headers.accept?.includes('application/json')) {
     // Add basic pagination
@@ -729,28 +729,46 @@ app.get('/dashboard', (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     
+    // Filter by user - if logged in, show user's links; if not, show public links
+    let countQuery, dataQuery, queryParams;
+    
+    if (req.user) {
+      // Authenticated user - show their own links
+      console.log('Dashboard: Loading links for user ID:', req.user.id);
+      countQuery = 'SELECT COUNT(*) as total FROM links WHERE user_id = ?';
+      dataQuery = 'SELECT id, original_url, custom_alias, created_at, click_count, expires_at, is_active FROM links WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?';
+      queryParams = [req.user.id];
+    } else {
+      // Anonymous user - show only public links with no user_id
+      console.log('Dashboard: Loading public links for anonymous user');
+      countQuery = 'SELECT COUNT(*) as total FROM links WHERE user_id IS NULL AND is_public = 1';
+      dataQuery = 'SELECT id, original_url, custom_alias, created_at, click_count, expires_at, is_active FROM links WHERE user_id IS NULL AND is_public = 1 ORDER BY created_at DESC LIMIT ? OFFSET ?';
+      queryParams = [];
+    }
+    
     // Get total count for pagination
-    db.get('SELECT COUNT(*) as total FROM links', [], (countErr, countRow) => {
+    db.get(countQuery, queryParams, (countErr, countRow) => {
       if (countErr) {
         console.error('Database error:', countErr);
         return res.status(500).json({ error: 'Error loading dashboard data' });
       }
       
       // Get paginated data
-      db.all('SELECT id, original_url, created_at, click_count FROM links ORDER BY created_at DESC LIMIT ? OFFSET ?', 
-        [limit, offset], 
-        (err, rows) => {
-          if (err) {
-            console.error('Database error:', err);
-            return res.status(500).json({ error: 'Error loading dashboard data' });
-          }
-          
-          // Format data for response
-          const baseUrl = process.env.RAILWAY_STATIC_URL 
-            ? `https://${process.env.RAILWAY_STATIC_URL}` 
-            : `${req.protocol}://${req.headers.host}`;
-          const links = rows.map(row => ({
-            ...row,
+      const dataParams = req.user ? [req.user.id, limit, offset] : [limit, offset];
+      db.all(dataQuery, dataParams, (err, rows) => {
+        if (err) {
+          console.error('Database error:', err);
+          return res.status(500).json({ error: 'Error loading dashboard data' });
+        }
+        
+        console.log(`Dashboard: Found ${rows.length} links for ${req.user ? 'user ' + req.user.id : 'anonymous user'}`);
+        
+        // Format data for response
+        const baseUrl = process.env.RAILWAY_STATIC_URL 
+          ? `https://${process.env.RAILWAY_STATIC_URL}` 
+          : `${req.protocol}://${req.headers.host}`;
+        const links = rows.map(row => ({
+          ...row,
             short_url: `${baseUrl}/${row.id}`
           }));
           
@@ -900,24 +918,34 @@ app.get('/api/analytics/:id', (req, res) => {
 // ====== FEATURE 4: LINK MANAGEMENT APIs ======
 
 // Update a link (URL, alias, expiration)
-app.put('/api/links/:id', (req, res) => {
+app.put('/api/links/:id', optionalAuth, (req, res) => {
   const { id } = req.params;
   const { url, customAlias, expiresIn, isActive } = req.body;
   console.log('Update request for link:', id, 'with data:', { url, customAlias, expiresIn, isActive });
+  console.log('User making request:', req.user ? req.user.id : 'anonymous');
   
-  // Get current link first
-  db.get('SELECT * FROM links WHERE id = ? OR custom_alias = ?', [id, id], (err, currentLink) => {
+  // Get current link first with user authorization check
+  let query, params;
+  if (req.user) {
+    query = 'SELECT * FROM links WHERE (id = ? OR custom_alias = ?) AND user_id = ?';
+    params = [id, id, req.user.id];
+  } else {
+    query = 'SELECT * FROM links WHERE (id = ? OR custom_alias = ?) AND user_id IS NULL';
+    params = [id, id];
+  }
+  
+  db.get(query, params, (err, currentLink) => {
     if (err) {
       console.error('Database error:', err);
       return res.status(500).json({ error: 'Database error occurred' });
     }
     
     if (!currentLink) {
-      console.log('Link not found for update:', id);
-      return res.status(404).json({ error: 'Link not found' });
+      console.log('Link not found or unauthorized access for:', id);
+      return res.status(404).json({ error: 'Link not found or unauthorized' });
     }
     
-    console.log('Current link found:', currentLink.id);
+    console.log('Current link found:', currentLink.id, 'belongs to user:', currentLink.user_id);
     let updates = [];
     let values = [];
     
@@ -1058,19 +1086,33 @@ app.put('/api/links/:id', (req, res) => {
 });
 
 // Toggle link active/inactive status
-app.patch('/api/links/:id/toggle', (req, res) => {
+app.patch('/api/links/:id/toggle', optionalAuth, (req, res) => {
   const { id } = req.params;
+  console.log('Toggle request for link:', id, 'by user:', req.user ? req.user.id : 'anonymous');
   
-  db.get('SELECT * FROM links WHERE id = ? OR custom_alias = ?', [id, id], (err, link) => {
+  // Authorization check
+  let query, params;
+  if (req.user) {
+    query = 'SELECT * FROM links WHERE (id = ? OR custom_alias = ?) AND user_id = ?';
+    params = [id, id, req.user.id];
+  } else {
+    query = 'SELECT * FROM links WHERE (id = ? OR custom_alias = ?) AND user_id IS NULL';
+    params = [id, id];
+  }
+  
+  db.get(query, params, (err, link) => {
     if (err) {
+      console.error('Database error during toggle:', err);
       return res.status(500).json({ error: 'Database error occurred' });
     }
     
     if (!link) {
-      return res.status(404).json({ error: 'Link not found' });
+      console.log('Link not found or unauthorized for toggle:', id);
+      return res.status(404).json({ error: 'Link not found or unauthorized' });
     }
     
     const newStatus = link.is_active ? 0 : 1;
+    console.log('Toggling link:', link.id, 'from', link.is_active, 'to', newStatus);
     
     db.run('UPDATE links SET is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', 
            [newStatus, link.id], function(updateErr) {
@@ -1088,21 +1130,37 @@ app.patch('/api/links/:id/toggle', (req, res) => {
 });
 
 // Delete a link permanently
-app.delete('/api/links/:id', (req, res) => {
+app.delete('/api/links/:id', optionalAuth, (req, res) => {
   const { id } = req.params;
+  console.log('Delete request for link:', id, 'by user:', req.user ? req.user.id : 'anonymous');
   
-  db.get('SELECT * FROM links WHERE id = ? OR custom_alias = ?', [id, id], (err, link) => {
+  // Authorization check
+  let query, params;
+  if (req.user) {
+    query = 'SELECT * FROM links WHERE (id = ? OR custom_alias = ?) AND user_id = ?';
+    params = [id, id, req.user.id];
+  } else {
+    query = 'SELECT * FROM links WHERE (id = ? OR custom_alias = ?) AND user_id IS NULL';
+    params = [id, id];
+  }
+  
+  db.get(query, params, (err, link) => {
     if (err) {
+      console.error('Database error during delete:', err);
       return res.status(500).json({ error: 'Database error occurred' });
     }
     
     if (!link) {
-      return res.status(404).json({ error: 'Link not found' });
+      console.log('Link not found or unauthorized for delete:', id);
+      return res.status(404).json({ error: 'Link not found or unauthorized' });
     }
+    
+    console.log('Deleting link:', link.id, 'owned by user:', link.user_id);
     
     // Delete analytics data first (foreign key constraint)
     db.run('DELETE FROM clicks WHERE link_id = ?', [link.id], (clicksErr) => {
       if (clicksErr) {
+        console.error('Failed to delete analytics data:', clicksErr);
         return res.status(500).json({ error: 'Failed to delete analytics data' });
       }
       
@@ -1122,7 +1180,7 @@ app.delete('/api/links/:id', (req, res) => {
 });
 
 // Get all links for management (with pagination)
-app.get('/api/links', (req, res) => {
+app.get('/api/links', optionalAuth, (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const search = req.query.search || '';
@@ -1132,28 +1190,41 @@ app.get('/api/links', (req, res) => {
   let whereConditions = [];
   let params = [];
   
+  // User filter - CRITICAL SECURITY FIX
+  if (req.user) {
+    whereConditions.push('l.user_id = ?');
+    params.push(req.user.id);
+    console.log('Link management: Loading links for user ID:', req.user.id);
+  } else {
+    whereConditions.push('l.user_id IS NULL AND l.is_public = 1');
+    console.log('Link management: Loading public links for anonymous user');
+  }
+  
   // Search filter
   if (search) {
-    whereConditions.push('(original_url LIKE ? OR custom_alias LIKE ? OR id LIKE ?)');
+    whereConditions.push('(l.original_url LIKE ? OR l.custom_alias LIKE ? OR l.id LIKE ?)');
     params.push(`%${search}%`, `%${search}%`, `%${search}%`);
   }
   
   // Status filter
   if (status === 'active') {
-    whereConditions.push('is_active = 1 AND (expires_at IS NULL OR expires_at > datetime("now"))');
+    whereConditions.push('l.is_active = 1 AND (l.expires_at IS NULL OR l.expires_at > datetime("now"))');
   } else if (status === 'inactive') {
-    whereConditions.push('is_active = 0');
+    whereConditions.push('l.is_active = 0');
   } else if (status === 'expired') {
-    whereConditions.push('expires_at IS NOT NULL AND expires_at <= datetime("now")');
+    whereConditions.push('l.expires_at IS NOT NULL AND l.expires_at <= datetime("now")');
   }
   
-  const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+  const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
   
   // Get total count
-  db.get(`SELECT COUNT(*) as total FROM links ${whereClause}`, params, (countErr, countResult) => {
+  db.get(`SELECT COUNT(*) as total FROM links l ${whereClause}`, params, (countErr, countResult) => {
     if (countErr) {
+      console.error('Error counting links:', countErr);
       return res.status(500).json({ error: 'Error counting links' });
     }
+    
+    console.log(`Link management: Found ${countResult.total} total links for ${req.user ? 'user ' + req.user.id : 'anonymous user'}`);
     
     // Get links with click counts
     const sql = `
@@ -1197,56 +1268,92 @@ app.get('/api/links', (req, res) => {
 });
 
 // Bulk operations on multiple links
-app.post('/api/links/bulk', (req, res) => {
+app.post('/api/links/bulk', optionalAuth, (req, res) => {
   const { action, linkIds } = req.body;
+  console.log('Bulk action:', action, 'on links:', linkIds, 'by user:', req.user ? req.user.id : 'anonymous');
   
   if (!action || !linkIds || !Array.isArray(linkIds) || linkIds.length === 0) {
     return res.status(400).json({ error: 'Invalid bulk operation request' });
   }
   
-  const placeholders = linkIds.map(() => '?').join(',');
-  
-  switch (action) {
-    case 'activate':
-      db.run(`UPDATE links SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`, 
-             linkIds, function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Failed to activate links' });
-        }
-        res.json({ success: true, message: `${this.changes} links activated`, affected: this.changes });
-      });
-      break;
-      
-    case 'deactivate':
-      db.run(`UPDATE links SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`, 
-             linkIds, function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Failed to deactivate links' });
-        }
-        res.json({ success: true, message: `${this.changes} links deactivated`, affected: this.changes });
-      });
-      break;
-      
-    case 'delete':
-      // Delete analytics first
-      db.run(`DELETE FROM clicks WHERE link_id IN (${placeholders})`, linkIds, (clicksErr) => {
-        if (clicksErr) {
-          return res.status(500).json({ error: 'Failed to delete analytics data' });
-        }
-        
-        // Delete links
-        db.run(`DELETE FROM links WHERE id IN (${placeholders})`, linkIds, function(deleteErr) {
-          if (deleteErr) {
-            return res.status(500).json({ error: 'Failed to delete links' });
-          }
-          res.json({ success: true, message: `${this.changes} links deleted`, affected: this.changes });
-        });
-      });
-      break;
-      
-    default:
-      res.status(400).json({ error: 'Invalid bulk action. Use: activate, deactivate, or delete' });
+  // First, verify all links belong to the current user (or are public for anonymous users)
+  let authQuery, authParams;
+  if (req.user) {
+    authQuery = `SELECT id FROM links WHERE id IN (${linkIds.map(() => '?').join(',')}) AND user_id = ?`;
+    authParams = [...linkIds, req.user.id];
+  } else {
+    authQuery = `SELECT id FROM links WHERE id IN (${linkIds.map(() => '?').join(',')}) AND user_id IS NULL`;
+    authParams = linkIds;
   }
+  
+  db.all(authQuery, authParams, (authErr, authorizedLinks) => {
+    if (authErr) {
+      console.error('Authorization check error:', authErr);
+      return res.status(500).json({ error: 'Authorization check failed' });
+    }
+    
+    const authorizedIds = authorizedLinks.map(link => link.id);
+    const unauthorizedCount = linkIds.length - authorizedIds.length;
+    
+    if (unauthorizedCount > 0) {
+      console.log(`Bulk operation: ${unauthorizedCount} unauthorized links filtered out`);
+    }
+    
+    if (authorizedIds.length === 0) {
+      return res.status(403).json({ error: 'No authorized links found for bulk operation' });
+    }
+    
+    const placeholders = authorizedIds.map(() => '?').join(',');
+    
+    switch (action) {
+      case 'activate':
+        db.run(`UPDATE links SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`, 
+               authorizedIds, function(err) {
+          if (err) {
+            console.error('Failed to activate links:', err);
+            return res.status(500).json({ error: 'Failed to activate links' });
+          }
+          console.log(`Bulk activate: ${this.changes} links activated`);
+          res.json({ success: true, message: `${this.changes} links activated`, affected: this.changes });
+        });
+        break;
+        
+      case 'deactivate':
+        db.run(`UPDATE links SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`, 
+               authorizedIds, function(err) {
+          if (err) {
+            console.error('Failed to deactivate links:', err);
+            return res.status(500).json({ error: 'Failed to deactivate links' });
+          }
+          console.log(`Bulk deactivate: ${this.changes} links deactivated`);
+          res.json({ success: true, message: `${this.changes} links deactivated`, affected: this.changes });
+        });
+        break;
+        
+      case 'delete':
+        // Delete analytics first
+        db.run(`DELETE FROM clicks WHERE link_id IN (${placeholders})`, authorizedIds, (clicksErr) => {
+          if (clicksErr) {
+            console.error('Failed to delete analytics data:', clicksErr);
+            return res.status(500).json({ error: 'Failed to delete analytics data' });
+          }
+          
+          // Delete links
+          db.run(`DELETE FROM links WHERE id IN (${placeholders})`, authorizedIds, function(deleteErr) {
+            if (deleteErr) {
+              console.error('Failed to delete links:', deleteErr);
+              return res.status(500).json({ error: 'Failed to delete links' });
+            }
+            console.log(`Bulk delete: ${this.changes} links deleted`);
+            res.json({ success: true, message: `${this.changes} links deleted`, affected: this.changes });
+          });
+        });
+        break;
+        
+      default:
+        res.status(400).json({ error: 'Invalid bulk action. Use: activate, deactivate, or delete' });
+    }
+  });
 });
 
 const server = app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
