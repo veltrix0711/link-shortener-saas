@@ -57,9 +57,29 @@
             transition: border-color 0.3s;
         }
 
-        input[type="url"]:focus {
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="url"]:focus, input[type="text"]:focus {
             outline: none;
             border-color: #667eea;
+        }
+
+        .optional-label {
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        .alias-hint {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 5px;
         }
 
         .btn {
@@ -195,6 +215,11 @@
                 <label for="url">Enter your long URL:</label>
                 <input type="url" id="url" placeholder="https://example.com/very/long/url" required>
             </div>
+            <div class="input-group">
+                <label for="customAlias">Custom Alias <span class="optional-label">(optional)</span>:</label>
+                <input type="text" id="customAlias" placeholder="my-awesome-link" maxlength="20">
+                <div class="alias-hint">3-20 characters, letters, numbers, and hyphens only</div>
+            </div>
             <button type="submit" class="btn">Shorten URL</button>
         </form>
 
@@ -237,14 +262,31 @@
             e.preventDefault();
             
             const url = document.getElementById('url').value;
+            const customAlias = document.getElementById('customAlias').value.trim();
+            
+            // Validate custom alias on frontend
+            if (customAlias) {
+                const aliasRegex = /^[a-zA-Z0-9-]{3,20}$/;
+                if (!aliasRegex.test(customAlias)) {
+                    shortUrlDiv.textContent = 'Custom alias must be 3-20 characters long and contain only letters, numbers, and hyphens';
+                    result.className = 'result error';
+                    result.style.display = 'block';
+                    return;
+                }
+            }
             
             try {
+                const requestBody = { url: url };
+                if (customAlias) {
+                    requestBody.customAlias = customAlias;
+                }
+                
                 const response = await fetch('/shorten', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ url: url })
+                    body: JSON.stringify(requestBody)
                 });
 
                 const data = await response.json();
@@ -253,13 +295,20 @@
                     currentLinkId = data.id;
                     currentShortUrl = data.short_url;
                     
+                    const aliasInfo = data.custom_alias ? 
+                        `<small style="color: #667eea; font-weight: bold;">✨ Custom alias: ${data.custom_alias}</small><br>` : '';
+                    
                     shortUrlDiv.innerHTML = `
                         <strong>Short URL:</strong><br>
                         <a href="${data.short_url}" target="_blank">${data.short_url}</a><br>
-                        <small>Original: ${data.original_url}</small>
+                        ${aliasInfo}<small>Original: ${data.original_url}</small>
                     `;
                     result.className = 'result success';
                     result.style.display = 'block';
+                    
+                    // Clear the form
+                    document.getElementById('url').value = '';
+                    document.getElementById('customAlias').value = '';
                     
                     // Hide QR code section when creating new link
                     qrCodeDiv.style.display = 'none';

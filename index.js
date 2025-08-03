@@ -47,6 +47,7 @@ db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS links (
     id TEXT PRIMARY KEY,
     original_url TEXT NOT NULL,
+    custom_alias TEXT UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     click_count INTEGER DEFAULT 0
   )`);
@@ -55,20 +56,47 @@ db.serialize(() => {
 
 // Create a new shortened link
 app.post('/shorten', (req, res) => {
-  const { url } = req.body;
+  const { url, customAlias } = req.body;
   
   // Validate URL
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
   
+  // Validate custom alias if provided
+  if (customAlias) {
+    // Check alias format: 3-20 characters, alphanumeric and hyphens only
+    const aliasRegex = /^[a-zA-Z0-9-]{3,20}$/;
+    if (!aliasRegex.test(customAlias)) {
+      return res.status(400).json({ 
+        error: 'Custom alias must be 3-20 characters long and contain only letters, numbers, and hyphens' 
+      });
+    }
+    
+    // Check for reserved words
+    const reservedWords = ['api', 'dashboard', 'qr', 'admin', 'www', 'mail', 'ftp', 'localhost'];
+    if (reservedWords.includes(customAlias.toLowerCase())) {
+      return res.status(400).json({ error: 'This alias is reserved and cannot be used' });
+    }
+  }
+  
   try {
     // Check if URL is valid
     new URL(url);
     
-    const id = nanoid(6);
-    db.run('INSERT INTO links (id, original_url) VALUES (?, ?)', [id, url], (err) => {
-      if (err) return res.status(500).json({ error: 'Error saving to database' });
+    const id = customAlias || nanoid(6);
+    const insertSql = customAlias 
+      ? 'INSERT INTO links (id, original_url, custom_alias) VALUES (?, ?, ?)'
+      : 'INSERT INTO links (id, original_url) VALUES (?, ?)';
+    const insertParams = customAlias ? [id, url, customAlias] : [id, url];
+    
+    db.run(insertSql, insertParams, function(err) {
+      if (err) {
+        if (err.message.includes('UNIQUE constraint failed')) {
+          return res.status(409).json({ error: 'This custom alias is already taken' });
+        }
+        return res.status(500).json({ error: 'Error saving to database' });
+      }
       
       // Use RAILWAY_STATIC_URL if available, otherwise fall back to host header
       const baseUrl = process.env.RAILWAY_STATIC_URL || `http://${req.headers.host}`;
@@ -77,7 +105,8 @@ app.post('/shorten', (req, res) => {
         success: true,
         short_url: `${baseUrl}/${id}`, 
         original_url: url,
-        id: id
+        id: id,
+        custom_alias: customAlias || null
       });
     });
   } catch (err) {

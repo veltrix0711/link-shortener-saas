@@ -347,6 +347,7 @@
                                     <a href="${link.short_url}" target="_blank" class="short-link">
                                         ${link.short_url.split('/').pop()}
                                     </a>
+                                    ${link.custom_alias ? `<br><small style="color: #667eea; font-weight: bold;">✨ ${link.custom_alias}</small>` : ''}
                                 </td>
                                 <td>
                                     <div class="original-url" title="${link.original_url}">
