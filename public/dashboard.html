@@ -38,6 +38,32 @@
             margin-bottom: 10px;
         }
 
+        .header p {
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 0;
+        }
+
+        .nav {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .nav a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 25px;
+            transition: all 0.3s ease;
+        }
+
+        .nav a:hover, .nav a.active {
+            background: rgba(255,255,255,0.2);
+            border-color: white;
+        }
+
         .stats {
             display: flex;
             justify-content: space-around;
@@ -241,7 +267,10 @@
     <div class="container">
         <div class="header">
             <h1>📊 Dashboard</h1>
-            <p>Manage your shortened links</p>
+            <p>View analytics and manage your shortened links</p>
+            <div class="nav" id="navigation">
+                <!-- Navigation will be populated by JavaScript based on auth status -->
+            </div>
         </div>
 
         <div class="stats" id="stats">
@@ -283,6 +312,62 @@
                 </div>
             </div>
         </div>    <script>
+        let currentUser = null;
+        const navigation = document.getElementById('navigation');
+
+        // Check authentication status
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/api/auth/user');
+                if (response.ok) {
+                    const data = await response.json();
+                    currentUser = data.user;
+                } else {
+                    currentUser = null;
+                    // Redirect to login if not authenticated
+                    window.location.href = '/login.html';
+                    return;
+                }
+            } catch (error) {
+                currentUser = null;
+                // Redirect to login if not authenticated
+                window.location.href = '/login.html';
+                return;
+            }
+        }
+
+        // Setup navigation based on auth status
+        function setupNavigation() {
+            if (currentUser) {
+                // Authenticated user navigation
+                navigation.innerHTML = `
+                    <a href="/">Create Link</a>
+                    <a href="/dashboard" class="active">Dashboard</a>
+                    <a href="/manage.html">Manage Links</a>
+                    <a href="#" onclick="handleLogout()" style="border-color: #ff6b6b; color: #ff6b6b;">Logout</a>
+                `;
+            } else {
+                // Guest user navigation - shouldn't happen since we redirect
+                navigation.innerHTML = `
+                    <a href="/">Create Link</a>
+                    <a href="/login.html">Login</a>
+                    <a href="/register.html">Register</a>
+                `;
+            }
+        }
+
+        // Handle logout
+        async function handleLogout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                currentUser = null;
+                alert('Logged out successfully!');
+                window.location.href = '/';
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+
         let currentPage = 1;
         let totalPages = 1;
         const pageSize = 10;
@@ -461,11 +546,24 @@
             }
         });
 
+        // Initialize page
+        async function initializePage() {
+            await checkAuthStatus();
+            setupNavigation();
+            if (currentUser) {
+                loadDashboard();
+            }
+        }
+
         // Load initial data
-        loadDashboard();
+        initializePage();
 
         // Auto-refresh every 30 seconds
-        setInterval(() => loadDashboard(currentPage), 30000);
+        setInterval(() => {
+            if (currentUser) {
+                loadDashboard(currentPage);
+            }
+        }, 30000);
     </script>
 </body>
 </html>

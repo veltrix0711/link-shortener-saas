@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Link Management - URL Shortener</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .nav {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .nav a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 25px;
+            transition: all 0.3s ease;
+        }
+
+        .nav a:hover, .nav a.active {
+            background: rgba(255,255,255,0.2);
+            border-color: white;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .search-filter {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box input {
+            padding: 12px 15px 12px 45px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            width: 300px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .search-box::before {
+            content: '🔍';
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 18px;
+        }
+
+        .filter-select {
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 16px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .bulk-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn.danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+        }
+
+        .btn.secondary {
+            background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .links-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+
+        .links-table th,
+        .links-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .links-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .links-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .link-url {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .short-url {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .short-url:hover {
+            text-decoration: underline;
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-expired {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .alias-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .action-btn.edit {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .action-btn.toggle {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .action-btn.delete {
+            background: #dc3545;
+            color: white;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .page-btn {
+            padding: 8px 12px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .page-btn:hover,
+        .page-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+        }
+
+        .close-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-filter {
+                flex-direction: column;
+            }
+
+            .search-box input {
+                width: 100%;
+            }
+
+            .links-table {
+                font-size: 14px;
+            }
+
+            .links-table th,
+            .links-table td {
+                padding: 10px;
+            }
+
+            .link-url {
+                max-width: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔗 Link Management</h1>
+            <p>Manage your shortened links with powerful tools</p>
+            <div class="nav" id="navigation">
+                <!-- Navigation will be populated by JavaScript based on auth status -->
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Stats Section -->
+            <div class="stats" id="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalLinks">-</div>
+                    <div class="stat-label">Total Links</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="activeLinks">-</div>
+                    <div class="stat-label">Active Links</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalClicks">-</div>
+                    <div class="stat-label">Total Clicks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="expiredLinks">-</div>
+                    <div class="stat-label">Expired Links</div>
+                </div>
+            </div>
+
+            <!-- Controls Section -->
+            <div class="controls">
+                <div class="search-filter">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="Search links...">
+                    </div>
+                    <select id="statusFilter" class="filter-select">
+                        <option value="all">All Links</option>
+                        <option value="active">Active Only</option>
+                        <option value="inactive">Inactive Only</option>
+                        <option value="expired">Expired Only</option>
+                    </select>
+                </div>
+                <div class="bulk-actions">
+                    <button class="btn secondary" onclick="bulkAction('activate')" id="activateBtn" disabled>
+                        ✅ Activate Selected
+                    </button>
+                    <button class="btn secondary" onclick="bulkAction('deactivate')" id="deactivateBtn" disabled>
+                        ⏸️ Deactivate Selected
+                    </button>
+                    <button class="btn danger" onclick="bulkAction('delete')" id="deleteBtn" disabled>
+                        🗑️ Delete Selected
+                    </button>
+                </div>
+            </div>
+
+            <!-- Links Table -->
+            <div id="linksContainer">
+                <table class="links-table" id="linksTable">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+                            <th>Short URL</th>
+                            <th>Original URL</th>
+                            <th>Status</th>
+                            <th>Clicks</th>
+                            <th>Created</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="linksTableBody">
+                        <!-- Links will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination">
+                <!-- Pagination will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Link Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Link</h3>
+                <p>Update the link details below</p>
+            </div>
+            <form id="editForm">
+                <div class="form-group">
+                    <label for="editUrl">Destination URL</label>
+                    <input type="url" id="editUrl" required>
+                </div>
+                <div class="form-group">
+                    <label for="editAlias">Custom Alias (optional)</label>
+                    <input type="text" id="editAlias" placeholder="Leave empty to remove alias">
+                </div>
+                <div class="form-group">
+                    <label for="editExpiration">Expiration (optional)</label>
+                    <select id="editExpiration">
+                        <option value="">No expiration</option>
+                        <option value="1 hour">1 hour</option>
+                        <option value="1 day">1 day</option>
+                        <option value="1 week">1 week</option>
+                        <option value="1 month">1 month</option>
+                        <option value="3 months">3 months</option>
+                        <option value="6 months">6 months</option>
+                        <option value="1 year">1 year</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="close-btn" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="btn">💾 Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        const navigation = document.getElementById('navigation');
+
+        // Check authentication status
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/api/auth/user');
+                if (response.ok) {
+                    const data = await response.json();
+                    currentUser = data.user;
+                } else {
+                    currentUser = null;
+                    // Redirect to login if not authenticated
+                    window.location.href = '/login.html';
+                    return;
+                }
+            } catch (error) {
+                currentUser = null;
+                // Redirect to login if not authenticated
+                window.location.href = '/login.html';
+                return;
+            }
+        }
+
+        // Setup navigation based on auth status
+        function setupNavigation() {
+            if (currentUser) {
+                // Authenticated user navigation
+                navigation.innerHTML = `
+                    <a href="/">Create Link</a>
+                    <a href="/dashboard">Dashboard</a>
+                    <a href="/manage.html" class="active">Manage Links</a>
+                    <a href="#" onclick="handleLogout()" style="border-color: #ff6b6b; color: #ff6b6b;">Logout</a>
+                `;
+            } else {
+                // Guest user navigation - shouldn't happen since we redirect
+                navigation.innerHTML = `
+                    <a href="/">Create Link</a>
+                    <a href="/login.html">Login</a>
+                    <a href="/register.html">Register</a>
+                `;
+            }
+        }
+
+        // Handle logout
+        async function handleLogout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                currentUser = null;
+                alert('Logged out successfully!');
+                window.location.href = '/';
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+
+        let currentPage = 1;
+        let currentSearch = '';
+        let currentStatus = 'all';
+        let selectedLinks = new Set();
+        let editingLinkId = null;
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', async function() {
+            await checkAuthStatus();
+            setupNavigation();
+            
+            if (currentUser) {
+                loadLinks();
+                loadStats();
+
+                // Set up event listeners
+                document.getElementById('searchInput').addEventListener('input', debounce(handleSearch, 300));
+                document.getElementById('statusFilter').addEventListener('change', handleFilterChange);
+                document.getElementById('editForm').addEventListener('submit', handleEditSubmit);
+            }
+        });
+
+        // Debounce function for search
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Load links with pagination
+        async function loadLinks(page = 1) {
+            try {
+                const params = new URLSearchParams({
+                    page,
+                    limit: 10,
+                    search: currentSearch,
+                    status: currentStatus
+                });
+
+                const response = await fetch(`/api/links?${params}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    displayLinks(data.links);
+                    displayPagination(data.pagination);
+                    updateBulkActionButtons();
+                } else {
+                    showError('Failed to load links');
+                }
+            } catch (error) {
+                console.error('Error loading links:', error);
+                showError('Failed to load links');
+            }
+        }
+
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/analytics/global');
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('totalLinks').textContent = data.global_stats.total_links;
+                    document.getElementById('totalClicks').textContent = data.global_stats.total_clicks;
+
+                    // Calculate active and expired links
+                    const linksResponse = await fetch('/api/links?limit=1000');
+                    const linksData = await linksResponse.json();
+
+                    if (linksData.success) {
+                        const activeLinks = linksData.links.filter(link => link.is_active && !link.is_expired).length;
+                        const expiredLinks = linksData.links.filter(link => link.is_expired).length;
+
+                        document.getElementById('activeLinks').textContent = activeLinks;
+                        document.getElementById('expiredLinks').textContent = expiredLinks;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Display links in table
+        function displayLinks(links) {
+            const tbody = document.getElementById('linksTableBody');
+            
+            if (links.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="empty-state">
+                            <h3>No links found</h3>
+                            <p>Try adjusting your search or filter criteria</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = links.map(link => {
+                const status = getStatus(link);
+                const statusClass = `status-${status.toLowerCase()}`;
+                const shortUrl = link.custom_alias || link.id;
+                
+                return `
+                    <tr>
+                        <td>
+                            <input type="checkbox" class="link-checkbox" value="${link.id}" 
+                                   onchange="toggleLinkSelection('${link.id}')">
+                        </td>
+                        <td>
+                            <a href="${link.short_url}" target="_blank" class="short-url">
+                                /${shortUrl}
+                            </a>
+                            ${link.custom_alias ? '<span class="alias-badge">✨ Custom</span>' : ''}
+                        </td>
+                        <td>
+                            <div class="link-url" title="${link.original_url}">
+                                ${link.original_url}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="status-badge ${statusClass}">${status}</span>
+                        </td>
+                        <td>${link.click_count}</td>
+                        <td>${formatDate(link.created_at)}</td>
+                        <td>${link.expires_in_human || 'Never'}</td>
+                        <td>
+                            <div class="actions">
+                                <button class="action-btn edit" onclick="editLink('${link.id}')" title="Edit">
+                                    ✏️
+                                </button>
+                                <button class="action-btn toggle" onclick="toggleLink('${link.id}')" title="Toggle Status">
+                                    ${link.is_active ? '⏸️' : '▶️'}
+                                </button>
+                                <button class="action-btn delete" onclick="deleteLink('${link.id}')" title="Delete">
+                                    🗑️
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Get link status
+        function getStatus(link) {
+            if (link.is_expired) return 'Expired';
+            if (!link.is_active) return 'Inactive';
+            return 'Active';
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        // Display pagination
+        function displayPagination(pagination) {
+            const container = document.getElementById('pagination');
+            
+            if (pagination.totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            
+            // Previous button
+            html += `
+                <button class="page-btn" ${pagination.hasPrev ? '' : 'disabled'} 
+                        onclick="changePage(${pagination.page - 1})">
+                    ← Previous
+                </button>
+            `;
+
+            // Page numbers
+            for (let i = 1; i <= pagination.totalPages; i++) {
+                html += `
+                    <button class="page-btn ${i === pagination.page ? 'active' : ''}" 
+                            onclick="changePage(${i})">
+                        ${i}
+                    </button>
+                `;
+            }
+
+            // Next button
+            html += `
+                <button class="page-btn" ${pagination.hasNext ? '' : 'disabled'} 
+                        onclick="changePage(${pagination.page + 1})">
+                    Next →
+                </button>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // Handle search
+        function handleSearch(e) {
+            currentSearch = e.target.value;
+            currentPage = 1;
+            loadLinks(currentPage);
+        }
+
+        // Handle filter change
+        function handleFilterChange(e) {
+            currentStatus = e.target.value;
+            currentPage = 1;
+            loadLinks(currentPage);
+        }
+
+        // Change page
+        function changePage(page) {
+            currentPage = page;
+            loadLinks(currentPage);
+        }
+
+        // Toggle select all
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.link-checkbox');
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAll.checked;
+                if (selectAll.checked) {
+                    selectedLinks.add(checkbox.value);
+                } else {
+                    selectedLinks.delete(checkbox.value);
+                }
+            });
+            
+            updateBulkActionButtons();
+        }
+
+        // Toggle individual link selection
+        function toggleLinkSelection(linkId) {
+            const checkbox = document.querySelector(`input[value="${linkId}"]`);
+            
+            if (checkbox.checked) {
+                selectedLinks.add(linkId);
+            } else {
+                selectedLinks.delete(linkId);
+            }
+            
+            // Update select all checkbox
+            const selectAll = document.getElementById('selectAll');
+            const checkboxes = document.querySelectorAll('.link-checkbox');
+            const checkedCount = document.querySelectorAll('.link-checkbox:checked').length;
+            
+            selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+            selectAll.checked = checkedCount === checkboxes.length;
+            
+            updateBulkActionButtons();
+        }
+
+        // Update bulk action button states
+        function updateBulkActionButtons() {
+            const hasSelection = selectedLinks.size > 0;
+            document.getElementById('activateBtn').disabled = !hasSelection;
+            document.getElementById('deactivateBtn').disabled = !hasSelection;
+            document.getElementById('deleteBtn').disabled = !hasSelection;
+        }
+
+        // Bulk actions
+        async function bulkAction(action) {
+            if (selectedLinks.size === 0) return;
+
+            const confirmed = confirm(`Are you sure you want to ${action} ${selectedLinks.size} selected link(s)?`);
+            if (!confirmed) return;
+
+            try {
+                const response = await fetch('/api/links/bulk', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action,
+                        linkIds: Array.from(selectedLinks)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showSuccess(data.message);
+                    selectedLinks.clear();
+                    loadLinks(currentPage);
+                    loadStats();
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                console.error('Bulk action error:', error);
+                showError('Failed to perform bulk action');
+            }
+        }
+
+        // Edit link
+        function editLink(linkId) {
+            editingLinkId = linkId;
+            
+            // Find link data
+            const row = document.querySelector(`input[value="${linkId}"]`).closest('tr');
+            const cells = row.querySelectorAll('td');
+            
+            // Get current values (this is simplified - in a real app you'd fetch from API)
+            const shortUrl = cells[1].textContent.trim().replace('/', '');
+            const originalUrl = cells[2].textContent.trim();
+            
+            // Populate form
+            document.getElementById('editUrl').value = originalUrl;
+            document.getElementById('editAlias').value = shortUrl.includes('✨') ? shortUrl.split('/')[1] : '';
+            document.getElementById('editExpiration').value = '';
+            
+            // Show modal
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        // Close edit modal
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+            editingLinkId = null;
+        }
+
+        // Handle edit form submit
+        async function handleEditSubmit(e) {
+            e.preventDefault();
+            
+            if (!editingLinkId) return;
+
+            const formData = {
+                url: document.getElementById('editUrl').value,
+                customAlias: document.getElementById('editAlias').value,
+                expiresIn: document.getElementById('editExpiration').value
+            };
+
+            try {
+                const response = await fetch(`/api/links/${editingLinkId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showSuccess('Link updated successfully');
+                    closeEditModal();
+                    loadLinks(currentPage);
+                    loadStats();
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                console.error('Edit error:', error);
+                showError('Failed to update link');
+            }
+        }
+
+        // Toggle link active status
+        async function toggleLink(linkId) {
+            try {
+                const response = await fetch(`/api/links/${linkId}/toggle`, {
+                    method: 'PATCH'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showSuccess(data.message);
+                    loadLinks(currentPage);
+                    loadStats();
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                console.error('Toggle error:', error);
+                showError('Failed to toggle link status');
+            }
+        }
+
+        // Delete link
+        async function deleteLink(linkId) {
+            const confirmed = confirm('Are you sure you want to delete this link? This action cannot be undone.');
+            if (!confirmed) return;
+
+            try {
+                const response = await fetch(`/api/links/${linkId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showSuccess('Link deleted successfully');
+                    loadLinks(currentPage);
+                    loadStats();
+                } else {
+                    showError(data.error);
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                showError('Failed to delete link');
+            }
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            // Simple alert for now - could be enhanced with toast notifications
+            alert('✅ ' + message);
+        }
+
+        // Show error message
+        function showError(message) {
+            // Simple alert for now - could be enhanced with toast notifications
+            alert('❌ ' + message);
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('editModal');
+            if (event.target === modal) {
+                closeEditModal();
+            }
+        }
+    </script>
+</body>
+</html>
